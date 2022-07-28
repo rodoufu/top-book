@@ -1,11 +1,8 @@
-use std::collections::{
-    BTreeMap,
-    HashMap,
-};
+use std::collections::HashMap;
 
 const EPSILON: f64 = 1e-5;
 
-#[derive(PartialOrd, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Source {
     OKX,
 }
@@ -16,18 +13,13 @@ pub struct Level {
     pub size: f64,
 }
 
-impl Level {
-    fn is_zero(&self) -> bool {
-        self.size.abs() < EPSILON
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct LevelInfo {
     price: f64,
     source_size: HashMap<Source, f64>,
 }
 
+#[derive(Debug)]
 pub struct Orderbook {
     asks: Vec<LevelInfo>,
     bids: Vec<LevelInfo>,
@@ -91,9 +83,11 @@ impl Orderbook {
         }
 
         while update_it < update_len && (depth == 0 || resp.len() < depth) {
-            let mut source_size = HashMap::new();
-            source_size.insert(source, update_book[update_it].size);
-            resp.push(LevelInfo { price: update_book[update_it].price, source_size });
+            if update_book[update_it].size > EPSILON {
+                let mut source_size = HashMap::new();
+                source_size.insert(source, update_book[update_it].size);
+                resp.push(LevelInfo { price: update_book[update_it].price, source_size });
+            }
             update_it += 1;
         }
 
@@ -119,7 +113,7 @@ impl Orderbook {
                     x.source_size.remove(&source);
                     x.clone()
                 }).filter(|x| !x.source_size.is_empty()).collect();
-                self.bids = self.bids.iter_mut().map(|mut x| {
+                self.bids = self.bids.iter_mut().map(|x| {
                     x.source_size.remove(&source);
                     x.clone()
                 }).filter(|x| !x.source_size.is_empty()).collect();
@@ -148,7 +142,12 @@ impl Orderbook {
 }
 
 mod test {
-    use crate::orderbook::{Level, Operation, Orderbook, Source};
+    use crate::orderbook::{
+        Level,
+        Operation,
+        Orderbook,
+        Source,
+    };
 
     #[test]
     fn should_insert_two_on_each_side() {

@@ -20,11 +20,11 @@ use tokio_tungstenite::{
 use url::Url;
 
 mod orderbook;
-mod okx
-;
+mod okx;
 
 #[tokio::main]
 async fn main() {
+    // TODO move websocket logic
     let connect_addr = "wss://ws.okx.com:8443/ws/v5/public".to_string();
     let url = Url::parse(&connect_addr).unwrap();
 
@@ -63,6 +63,7 @@ async fn main() {
         })
     };
 
+    // TODO add logger
     let process_orderbook = task::spawn(async move {
         let mut orderbook = Orderbook::new(10);
         while let Some(operation) = receiver.recv().await {

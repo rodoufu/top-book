@@ -1,23 +1,26 @@
-use std::future::Future;
-use futures_util::{SinkExt, StreamExt};
-use futures_util::stream::{ForEach, SplitStream};
-use serde_derive::{
-    Deserialize,
-    Serialize,
-};
-use tokio::io::AsyncWriteExt;
-use tokio::net::TcpStream;
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::task;
-use tokio::task::JoinHandle;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
-use tokio_tungstenite::tungstenite::{Error, Message};
-use url::Url;
 use crate::orderbook::{
     Level,
     Operation,
     Source,
 };
+use futures_util::{
+    SinkExt,
+    StreamExt,
+};
+use serde_derive::{
+    Deserialize,
+    Serialize,
+};
+use std::num::ParseFloatError;
+use tokio::{
+    io::AsyncWriteExt,
+    sync::mpsc::UnboundedSender,
+};
+use tokio_tungstenite::{
+    connect_async,
+    tungstenite::Message,
+};
+use url::Url;
 
 
 #[derive(Serialize, Deserialize)]
@@ -26,27 +29,37 @@ struct OrderbookData {
     bids: Vec<Vec<String>>,
 }
 
+pub enum OKXError {
+    AskPriceParseError(ParseFloatError),
+    AskSizeParseError(ParseFloatError),
+    BidPriceParseError(ParseFloatError),
+    BidSizeParseError(ParseFloatError),
+    UrlParseError(url::ParseError),
+    WSConnectError(tokio_tungstenite::tungstenite::Error),
+    WSSendError(tokio_tungstenite::tungstenite::Error),
+}
+
 impl OrderbookData {
-    fn asks_level(&self) -> Vec<Level> {
+    fn asks_level(&self) -> Result<Vec<Level>, OKXError> {
         let mut resp = Vec::with_capacity(self.asks.len());
         for ask in &self.asks {
             resp.push(Level {
-                price: ask[0].parse::<f64>().unwrap(),
-                size: ask[1].parse::<f64>().unwrap(),
+                price: ask[0].parse::<f64>().map_err(OKXError::AskPriceParseError)?,
+                size: ask[1].parse::<f64>().map_err(OKXError::AskSizeParseError)?,
             });
         }
-        resp
+        Ok(resp)
     }
 
-    fn bids_level(&self) -> Vec<Level> {
+    fn bids_level(&self) -> Result<Vec<Level>, OKXError> {
         let mut resp = Vec::with_capacity(self.bids.len());
         for bid in &self.bids {
             resp.push(Level {
-                price: bid[0].parse::<f64>().unwrap(),
-                size: bid[1].parse::<f64>().unwrap(),
+                price: bid[0].parse::<f64>().map_err(OKXError::BidPriceParseError)?,
+                size: bid[1].parse::<f64>().map_err(OKXError::BidSizeParseError)?,
             });
         }
-        resp
+        Ok(resp)
     }
 }
 
@@ -59,22 +72,24 @@ enum OrderbookResponse {
     Update { data: Vec<OrderbookData> },
 }
 
-impl Into<Operation> for OrderbookResponse {
-    fn into(self) -> Operation {
+impl TryInto<Operation> for OrderbookResponse {
+    type Error = OKXError;
+
+    fn try_into(self) -> Result<Operation, Self::Error> {
         match self {
             OrderbookResponse::Snapshot { data } => {
-                Operation::Snapshot {
-                    asks: data[0].asks_level(),
-                    bids: data[0].bids_level(),
+                Ok(Operation::Snapshot {
+                    asks: data[0].asks_level()?,
+                    bids: data[0].bids_level()?,
                     source: Source::OKX,
-                }
+                })
             }
             OrderbookResponse::Update { data } => {
-                Operation::Update {
-                    asks: data[0].asks_level(),
-                    bids: data[0].bids_level(),
+                Ok(Operation::Update {
+                    asks: data[0].asks_level()?,
+                    bids: data[0].bids_level()?,
                     source: Source::OKX,
-                }
+                })
             }
         }
     }
@@ -87,24 +102,28 @@ enum WebsocketResponse {
     Response { event: String },
 }
 
-pub async fn consume_orderbook(sender: UnboundedSender<Operation>) {
+pub async fn consume_orderbook(sender: UnboundedSender<Operation>) -> Result<(), OKXError> {
     let connect_addr = "wss://ws.okx.com:8443/ws/v5/public".to_string();
-    let url = Url::parse(&connect_addr).unwrap();
+    let url = Url::parse(&connect_addr).map_err(OKXError::UrlParseError)?;
 
     let (ws_stream, _) = connect_async(url).await.
-        expect("Failed to connect");
+        map_err(OKXError::WSConnectError)?;
     println!("WebSocket handshake has been successfully completed");
 
     let (mut write, read) = ws_stream.split();
-    write.send(Message::Text(r#"{"op":"subscribe","args":[{"channel": "books","instId":"BTC-USDT"}]}"#.to_string())).await.expect("subscribing");
+    write.send(Message::Text(
+        r#"{"op":"subscribe","args":[{"channel": "books","instId":"BTC-USDT"}]}"#.to_string())
+    ).await.map_err(OKXError::WSSendError)?;
 
     read.for_each(|message| async {
-        let okx_parse: serde_json::Result<WebsocketResponse> = serde_json::from_slice(&message.unwrap().into_data());
+        let okx_parse: serde_json::Result<WebsocketResponse> = serde_json::from_slice(
+            &message.unwrap().into_data(),
+        );
         match okx_parse {
             Ok(resp) => {
                 match resp {
                     WebsocketResponse::Action(action) => {
-                        sender.send(action.into()).ok().unwrap();
+                        sender.send(action.try_into().ok().unwrap()).ok().unwrap();
                     }
                     WebsocketResponse::Response { event } => {
                         tokio::io::stdout().write_all(
@@ -120,6 +139,8 @@ pub async fn consume_orderbook(sender: UnboundedSender<Operation>) {
             }
         }
     }).await;
+
+    Ok(())
 }
 
 mod test {

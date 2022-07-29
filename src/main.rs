@@ -5,19 +5,12 @@ use crate::{
 use futures_util::{
     future,
     pin_mut,
-    SinkExt,
-    StreamExt,
 };
 use tokio::{
     io::AsyncWriteExt,
     sync::mpsc,
     task,
 };
-use tokio_tungstenite::{
-    connect_async,
-    tungstenite::protocol::Message,
-};
-use url::Url;
 
 mod orderbook;
 mod okx;

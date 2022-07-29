@@ -30,13 +30,13 @@ struct OrderbookData {
 }
 
 pub enum OKXError {
-    AskPriceParseError(ParseFloatError),
-    AskSizeParseError(ParseFloatError),
-    BidPriceParseError(ParseFloatError),
-    BidSizeParseError(ParseFloatError),
-    UrlParseError(url::ParseError),
-    WSConnectError(tokio_tungstenite::tungstenite::Error),
-    WSSendError(tokio_tungstenite::tungstenite::Error),
+    AskPriceParse(ParseFloatError),
+    AskSizeParse(ParseFloatError),
+    BidPriceParse(ParseFloatError),
+    BidSizeParse(ParseFloatError),
+    UrlParse(url::ParseError),
+    WSConnect(tokio_tungstenite::tungstenite::Error),
+    WSSend(tokio_tungstenite::tungstenite::Error),
 }
 
 impl OrderbookData {
@@ -44,8 +44,8 @@ impl OrderbookData {
         let mut resp = Vec::with_capacity(self.asks.len());
         for ask in &self.asks {
             resp.push(Level {
-                price: ask[0].parse::<f64>().map_err(OKXError::AskPriceParseError)?,
-                size: ask[1].parse::<f64>().map_err(OKXError::AskSizeParseError)?,
+                price: ask[0].parse::<f64>().map_err(OKXError::AskPriceParse)?,
+                size: ask[1].parse::<f64>().map_err(OKXError::AskSizeParse)?,
             });
         }
         Ok(resp)
@@ -55,8 +55,8 @@ impl OrderbookData {
         let mut resp = Vec::with_capacity(self.bids.len());
         for bid in &self.bids {
             resp.push(Level {
-                price: bid[0].parse::<f64>().map_err(OKXError::BidPriceParseError)?,
-                size: bid[1].parse::<f64>().map_err(OKXError::BidSizeParseError)?,
+                price: bid[0].parse::<f64>().map_err(OKXError::BidPriceParse)?,
+                size: bid[1].parse::<f64>().map_err(OKXError::BidSizeParse)?,
             });
         }
         Ok(resp)
@@ -104,16 +104,16 @@ enum WebsocketResponse {
 
 pub async fn consume_orderbook(sender: UnboundedSender<Operation>) -> Result<(), OKXError> {
     let connect_addr = "wss://ws.okx.com:8443/ws/v5/public".to_string();
-    let url = Url::parse(&connect_addr).map_err(OKXError::UrlParseError)?;
+    let url = Url::parse(&connect_addr).map_err(OKXError::UrlParse)?;
 
     let (ws_stream, _) = connect_async(url).await.
-        map_err(OKXError::WSConnectError)?;
+        map_err(OKXError::WSConnect)?;
     println!("WebSocket handshake has been successfully completed");
 
     let (mut write, read) = ws_stream.split();
     write.send(Message::Text(
         r#"{"op":"subscribe","args":[{"channel": "books","instId":"BTC-USDT"}]}"#.to_string())
-    ).await.map_err(OKXError::WSSendError)?;
+    ).await.map_err(OKXError::WSSend)?;
 
     read.for_each(|message| async {
         let okx_parse: serde_json::Result<WebsocketResponse> = serde_json::from_slice(

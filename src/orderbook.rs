@@ -41,7 +41,7 @@ pub enum Operation {
 
 impl Orderbook {
     fn process_side(
-        self_book: &mut Vec<LevelInfo>, source: Source, update_book: &Vec<Level>, depth: usize,
+        self_book: &mut Vec<LevelInfo>, source: Source, update_book: &[Level], depth: usize,
         side_multiplier: f64,
     ) -> Vec<LevelInfo> {
         let mut resp: Vec<LevelInfo> = Vec::with_capacity(depth);
@@ -94,13 +94,13 @@ impl Orderbook {
         resp
     }
 
-    fn process_asks(&mut self, source: Source, asks: &Vec<Level>) {
+    fn process_asks(&mut self, source: Source, asks: &[Level]) {
         self.asks = Orderbook::process_side(
             &mut self.asks, source, asks, self.depth, 1.0,
         );
     }
 
-    fn process_bids(&mut self, source: Source, bids: &Vec<Level>) {
+    fn process_bids(&mut self, source: Source, bids: &[Level]) {
         self.bids = Orderbook::process_side(
             &mut self.bids, source, bids, self.depth, -1.0,
         );

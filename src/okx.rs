@@ -1,7 +1,18 @@
+use std::future::Future;
+use futures_util::{SinkExt, StreamExt};
+use futures_util::stream::{ForEach, SplitStream};
 use serde_derive::{
     Deserialize,
     Serialize,
 };
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::task;
+use tokio::task::JoinHandle;
+use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::tungstenite::{Error, Message};
+use url::Url;
 use crate::orderbook::{
     Level,
     Operation,
@@ -41,7 +52,7 @@ impl OrderbookData {
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "action")]
-pub enum OrderbookResponse {
+enum OrderbookResponse {
     #[serde(rename = "snapshot")]
     Snapshot { data: Vec<OrderbookData> },
     #[serde(rename = "update")]
@@ -71,9 +82,44 @@ impl Into<Operation> for OrderbookResponse {
 
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum WebsocketResponse {
+enum WebsocketResponse {
     Action(OrderbookResponse),
     Response { event: String },
+}
+
+pub async fn consume_orderbook(sender: UnboundedSender<Operation>) {
+    let connect_addr = "wss://ws.okx.com:8443/ws/v5/public".to_string();
+    let url = Url::parse(&connect_addr).unwrap();
+
+    let (ws_stream, _) = connect_async(url).await.
+        expect("Failed to connect");
+    println!("WebSocket handshake has been successfully completed");
+
+    let (mut write, read) = ws_stream.split();
+    write.send(Message::Text(r#"{"op":"subscribe","args":[{"channel": "books","instId":"BTC-USDT"}]}"#.to_string())).await.expect("subscribing");
+
+    read.for_each(|message| async {
+        let okx_parse: serde_json::Result<WebsocketResponse> = serde_json::from_slice(&message.unwrap().into_data());
+        match okx_parse {
+            Ok(resp) => {
+                match resp {
+                    WebsocketResponse::Action(action) => {
+                        sender.send(action.into()).ok().unwrap();
+                    }
+                    WebsocketResponse::Response { event } => {
+                        tokio::io::stdout().write_all(
+                            format!("Got event {:?}\n", event).as_bytes(),
+                        ).await.unwrap();
+                    }
+                }
+            }
+            Err(err) => {
+                tokio::io::stdout().write_all(
+                    format!("Got parse error {:?}\n", err).as_bytes(),
+                ).await.unwrap();
+            }
+        }
+    }).await;
 }
 
 mod test {

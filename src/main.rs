@@ -1,6 +1,5 @@
 use crate::{
     orderbook::Orderbook,
-    okx::consume_orderbook,
 };
 use futures_util::{
     future,
@@ -13,6 +12,7 @@ use tokio::{
 };
 
 mod orderbook;
+mod deribit;
 mod okx;
 
 #[tokio::main]
@@ -25,18 +25,25 @@ async fn main() {
         while let Some(operation) = receiver.recv().await {
             orderbook.process(operation);
 
-            tokio::io::stdout().write_all(
-                format!(
-                    "Orderbook size {:?}, content: {:?}\n",
-                    orderbook.len(),
-                    orderbook,
-                ).as_bytes(),
-            ).await.unwrap();
+            // tokio::io::stdout().write_all(
+            //     format!(
+            //         "Orderbook size {:?}, content: {:?}\n",
+            //         orderbook.len(),
+            //         orderbook,
+            //     ).as_bytes(),
+            // ).await.unwrap();
         }
     });
 
-    let process_okx_ws = consume_orderbook(sender.clone());
+    let process_okx_ws = okx::consume_orderbook(sender.clone());
+    let process_deribit_ws = deribit::consume_orderbook(sender.clone());
 
-    pin_mut!(process_orderbook, process_okx_ws);
-    future::select(process_orderbook, process_okx_ws).await;
+    let process_okx_deribit = async {
+        pin_mut!(process_okx_ws, process_deribit_ws);
+        future::select(process_okx_ws, process_deribit_ws).await;
+        // process_deribit_ws.await.ok().unwrap();
+    };
+
+    pin_mut!(process_orderbook, process_okx_deribit);
+    future::select(process_orderbook, process_okx_deribit).await;
 }

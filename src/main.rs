@@ -19,7 +19,6 @@ mod okx;
 async fn main() {
     let (sender, mut receiver) = mpsc::unbounded_channel();
 
-    // TODO add logger
     let process_orderbook = task::spawn(async move {
         let mut orderbook = Orderbook::new(10);
         while let Some(operation) = receiver.recv().await {
@@ -41,7 +40,6 @@ async fn main() {
     let process_okx_deribit = async {
         pin_mut!(process_okx_ws, process_deribit_ws);
         future::select(process_okx_ws, process_deribit_ws).await;
-        // process_deribit_ws.await.ok().unwrap();
     };
 
     pin_mut!(process_orderbook, process_okx_deribit);

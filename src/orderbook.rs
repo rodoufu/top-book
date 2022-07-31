@@ -4,6 +4,7 @@ const EPSILON: f64 = 1e-5;
 
 #[derive(Debug, PartialOrd, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Source {
+    Deribit,
     OKX,
 }
 

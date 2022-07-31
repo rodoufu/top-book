@@ -25,13 +25,13 @@ async fn main() {
         while let Some(operation) = receiver.recv().await {
             orderbook.process(operation);
 
-            // tokio::io::stdout().write_all(
-            //     format!(
-            //         "Orderbook size {:?}, content: {:?}\n",
-            //         orderbook.len(),
-            //         orderbook,
-            //     ).as_bytes(),
-            // ).await.unwrap();
+            tokio::io::stdout().write_all(
+                format!(
+                    "Orderbook size {:?}, content: {:?}\n",
+                    orderbook.len(),
+                    orderbook,
+                ).as_bytes(),
+            ).await.unwrap();
         }
     });
 

@@ -11,7 +11,6 @@ use serde_derive::{
     Deserialize,
     Serialize,
 };
-use std::num::ParseFloatError;
 use tokio::{
     io::AsyncWriteExt,
     sync::mpsc::UnboundedSender,
@@ -169,7 +168,13 @@ pub async fn consume_orderbook(sender: UnboundedSender<Operation>) -> Result<(),
 }
 
 mod test {
-    use crate::deribit::{AskBidValue, SubscriptionData, SubscriptionParams, WebsocketMethod, WebsocketResponse};
+    use crate::deribit::{
+        AskBidValue,
+        SubscriptionData,
+        SubscriptionParams,
+        WebsocketMethod,
+        WebsocketResponse,
+    };
 
     #[test]
     fn should_parse_a_subscribe_response() {

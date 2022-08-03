@@ -112,7 +112,7 @@ pub async fn consume_orderbook(sender: UnboundedSender<Operation>) -> Result<(),
 
     let (mut write, read) = ws_stream.split();
     write.send(Message::Text(
-        r#"{"op":"subscribe","args":[{"channel": "books","instId":"BTC-USDT"}]}"#.to_string())
+        r#"{"op":"subscribe","args":[{"channel": "books","instId":"BTC-USD-SWAP"}]}"#.to_string())
     ).await.map_err(OKXError::WSSend)?;
 
     read.for_each(|message| async {

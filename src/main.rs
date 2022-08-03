@@ -20,7 +20,7 @@ async fn main() {
     let (sender, mut receiver) = mpsc::unbounded_channel();
 
     let process_orderbook = task::spawn(async move {
-        let mut orderbook = Orderbook::new(10);
+        let mut orderbook = Orderbook::new(200);
         while let Some(operation) = receiver.recv().await {
             orderbook.process(operation);
 

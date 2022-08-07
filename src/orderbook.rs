@@ -20,13 +20,6 @@ struct LevelInfo {
     source_size: HashMap<Source, f64>,
 }
 
-#[derive(Debug)]
-pub struct Orderbook {
-    asks: Vec<LevelInfo>,
-    bids: Vec<LevelInfo>,
-    depth: usize,
-}
-
 pub enum Operation {
     Snapshot {
         asks: Vec<Level>,
@@ -38,6 +31,22 @@ pub enum Operation {
         bids: Vec<Level>,
         source: Source,
     },
+}
+
+impl Operation {
+    pub fn len(&self) -> (usize, usize) {
+        match self {
+            Operation::Snapshot { asks, bids, .. } => (asks.len(), bids.len()),
+            Operation::Update { asks, bids, .. } => (asks.len(), bids.len()),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Orderbook {
+    asks: Vec<LevelInfo>,
+    bids: Vec<LevelInfo>,
+    depth: usize,
 }
 
 impl Orderbook {

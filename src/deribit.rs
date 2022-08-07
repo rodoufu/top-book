@@ -139,26 +139,28 @@ impl TryInto<Operation> for WebsocketMethod {
 }
 
 pub async fn consume_orderbook(sender: UnboundedSender<Operation>) -> Result<(), DeribitError> {
-    let tracer = global::tracer("orderbook_deribit_processor");
-    let span = tracer.start("orderbook_deribit");
-    let cx = Context::current_with_span(span);
+    // let tracer = global::tracer(util::TRACER_NAME);
+    // let span = tracer.start("orderbook_deribit");
+    // let cx = Context::current_with_span(span);
 
     let connect_addr = "wss://www.deribit.com/ws/api/v2/".to_string();
     let url = Url::parse(&connect_addr).map_err(DeribitError::UrlParse)?;
 
-    let (ws_stream, _) = connect_async(url).
-        with_context(cx.clone()).await.
-        map_err(DeribitError::WSConnect)?;
+    let (ws_stream, _) = connect_async(url)
+        // .with_context(cx.clone())
+        .await.map_err(DeribitError::WSConnect)?;
     println!("WebSocket handshake has been successfully completed");
 
     let (mut write, read) = ws_stream.split();
     write.send(Message::Text(
         r#"{"jsonrpc": "2.0","method":"public/subscribe","id":4200,"params":{"channels":["book.BTC-PERPETUAL.100ms"]}}"#.to_string())
-    ).with_context(cx.clone()).await.map_err(DeribitError::WSSend)?;
+    )
+        // .with_context(cx.clone())
+        .await.map_err(DeribitError::WSSend)?;
 
     read.for_each(|message| async {
-        let span = tracer.start("orderbook_deribit_msg");
-        let cx = Context::current_with_span(span);
+        // let span = tracer.start("orderbook_deribit_msg");
+        // let cx = Context::current_with_span(span);
 
         let deribit_parse: serde_json::Result<WebsocketResponse> = serde_json::from_slice(
             &message.unwrap().into_data(),
@@ -172,17 +174,23 @@ pub async fn consume_orderbook(sender: UnboundedSender<Operation>) -> Result<(),
                     WebsocketResponse::Response { result } => {
                         tokio::io::stdout().write_all(
                             format!("Got result {:?}\n", result).as_bytes(),
-                        ).with_context(cx.clone()).await.unwrap();
+                        )
+                            // .with_context(cx.clone())
+                            .await.unwrap();
                     }
                 }
             }
             Err(err) => {
                 tokio::io::stdout().write_all(
                     format!("Got parse error {:?}\n", err).as_bytes(),
-                ).with_context(cx.clone()).await.unwrap();
+                )
+                    // .with_context(cx.clone())
+                    .await.unwrap();
             }
         }
-    }).with_context(cx.clone()).await;
+    })
+        // .with_context(cx.clone())
+        .await;
 
     Ok(())
 }

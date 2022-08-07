@@ -7,12 +7,17 @@ authors = ["Rodolfo Araujo"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+futures = { version = "0.3.21" }
+futures-util = { version = "0.3.21", default-features = false, features = ["sink", "std"] }
 tokio = { version = "1.0.0", default-features = false, features = [
     "io-std", "io-util", "rt-multi-thread", "macros", "sync",
 ] }
 url = "2.2.2"
+opentelemetry = { version = "0.17", features = ["rt-tokio"] }
+opentelemetry-jaeger = { version = "0.16", features = ["rt-tokio"] }
 serde = "1.0"
 serde_json = { version = "1.0", features = ["raw_value"] }
 serde_derive = "1.0"
 tokio-tungstenite = { version = "0.17", features = ["native-tls"] }
+tracing-opentelemetry = "0.17"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

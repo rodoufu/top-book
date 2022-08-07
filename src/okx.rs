@@ -7,6 +7,17 @@ use futures_util::{
     SinkExt,
     StreamExt,
 };
+use opentelemetry::{
+    global,
+    sdk::trace as sdktrace,
+    trace::{
+        FutureExt,
+        TraceContextExt,
+        Tracer,
+        TraceError,
+    },
+    Context,
+};
 use serde_derive::{
     Deserialize,
     Serialize,
@@ -29,6 +40,7 @@ struct OrderbookData {
     bids: Vec<Vec<String>>,
 }
 
+#[derive(Debug)]
 pub enum OKXError {
     AskPriceParse(ParseFloatError),
     AskSizeParse(ParseFloatError),
@@ -103,19 +115,27 @@ enum WebsocketResponse {
 }
 
 pub async fn consume_orderbook(sender: UnboundedSender<Operation>) -> Result<(), OKXError> {
+    let tracer = global::tracer("orderbook_okx_processor");
+    let span = tracer.start("orderbook_okx");
+    let cx = Context::current_with_span(span);
+
     let connect_addr = "wss://ws.okx.com:8443/ws/v5/public".to_string();
     let url = Url::parse(&connect_addr).map_err(OKXError::UrlParse)?;
 
-    let (ws_stream, _) = connect_async(url).await.
+    let (ws_stream, _) = connect_async(url).
+        with_context(cx.clone()).await.
         map_err(OKXError::WSConnect)?;
     println!("WebSocket handshake has been successfully completed");
 
     let (mut write, read) = ws_stream.split();
     write.send(Message::Text(
         r#"{"op":"subscribe","args":[{"channel": "books","instId":"BTC-USD-SWAP"}]}"#.to_string())
-    ).await.map_err(OKXError::WSSend)?;
+    ).with_context(cx.clone()).await.map_err(OKXError::WSSend)?;
 
     read.for_each(|message| async {
+        let span = tracer.start("orderbook_okx_msg");
+        let cx = Context::current_with_span(span);
+
         let okx_parse: serde_json::Result<WebsocketResponse> = serde_json::from_slice(
             &message.unwrap().into_data(),
         );
@@ -128,17 +148,17 @@ pub async fn consume_orderbook(sender: UnboundedSender<Operation>) -> Result<(),
                     WebsocketResponse::Response { event } => {
                         tokio::io::stdout().write_all(
                             format!("Got event {:?}\n", event).as_bytes(),
-                        ).await.unwrap();
+                        ).with_context(cx.clone()).await.unwrap();
                     }
                 }
             }
             Err(err) => {
                 tokio::io::stdout().write_all(
                     format!("Got parse error {:?}\n", err).as_bytes(),
-                ).await.unwrap();
+                ).with_context(cx.clone()).await.unwrap();
             }
         }
-    }).await;
+    }).with_context(cx.clone()).await;
 
     Ok(())
 }
